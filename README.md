@@ -2,7 +2,7 @@
 
 ## CoroutineT
 
-Library that provides a coroutine monad transformer, which is a computation that can suspend itself any number of times, before eventually producing a result.
+A coroutine monad transformer, i.e. a computation that can suspend itself any number of times, before eventually producing a result.
 
 `CoroutineT : (s, m : Type -> Type) -> (r : Type) -> Type`
 
@@ -10,7 +10,7 @@ where:
 
 `s` is a user-provided type constructor for a suspended state. It can contain a "reason" for the suspension and a coroutine describing how to resume the computation (the type parameter), among other things.
 
-`m` is the inner monad. This will likely need some StateT or ReaderT flavour to determine when coroutines can be resumed.
+`m` is the inner monad. This will likely need some `StateT` or `IO` flavour to determine when coroutines can be resumed.
 
 `r` is the type of the produced result.
 
@@ -56,8 +56,12 @@ main = do
     Right (MkAwait key _) => "Coroutine is waiting for: " ++ joinBy ", " key
 ```
 
-Output: ``
+Output: `Result: ( Task 0 is done: Foo Bar ), ( Task 1 is done: Hello World )`
 
-If we comment one of the `putVar`s: ``
+Or if we interrupt the flow by commenting this line:
 
-Output: ``
+```
+-- putVar "b1" "Bar"
+```
+
+Output: `Coroutine is waiting for: b1`
