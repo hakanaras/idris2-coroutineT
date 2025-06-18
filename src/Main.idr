@@ -1,5 +1,6 @@
 module Main
 
+import Data.Maybe
 import Data.SortedMap
 import Data.String
 import Control.Monad.Coroutine
@@ -16,23 +17,22 @@ MyCoroutine = CoroutineT Await InnerMonad
 Functor Await where
   map f (MkAwait keys b) = MkAwait keys (f b)
 
-Suspension Await InnerMonad where
-  resume    (MkAwait _ s)    = s
-  resumable (MkAwait keys _) = do
-    scope <- get
-    let result = any (\key => case lookup key scope of { Just _ => True; Nothing => False }) keys
-    pure result
-  fold as b = MkAwait (foldl f [] as) b
-    where
-      f : List String -> Await a -> List String
-      f acc (MkAwait keys _) = acc ++ keys
-
-
 runMyCoroutine : MyCoroutine a -> IO (Intermediate Await InnerMonad a)
 runMyCoroutine mc = snd <$> runStateT empty (runCoroutineT mc)
 
 getScope : MyCoroutine Scope
 getScope = get
+
+awaitedKeys : Await _ -> List String
+awaitedKeys (MkAwait ks _) = ks
+
+containsKey : Scope -> String -> Bool
+containsKey scope key = isJust $ lookup key scope
+
+Suspension Await InnerMonad where
+  resume    (MkAwait _ s)    = s
+  resumable (MkAwait keys _) = (\scope => any (containsKey scope) keys) <$> get
+  awaitAll  awaits b         = MkAwait (foldl (++) [] $ awaitedKeys <$> awaits) b
 
 lookupVar : String -> MyCoroutine String
 lookupVar key = do
