@@ -1,0 +1,4 @@
+[custom.all.coroutineT]
+type = "local"
+path = "."
+ipkg = "coroutineT.ipkg"
