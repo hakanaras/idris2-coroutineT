@@ -10,3 +10,4 @@ homepage = "https://hakanaras.net/"
 
 -- main = Main
 -- executable = "coroutineT"
+-- opts = "--profile"

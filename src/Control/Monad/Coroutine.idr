@@ -1,131 +1,153 @@
 module Control.Monad.Coroutine
 
+import public Control.Monad.Coroutine.CPS
 import Control.Monad.State
+import Data.List1
 
 mutual
-  export
-  data CoroutineT : (s, m : Type -> Type) -> (r : Type) -> Type where
-    MkCoroutineT : m (Intermediate s m r) -> CoroutineT s m r
-
   public export
-  Intermediate : (s, m : Type -> Type) -> (r : Type) -> Type
+  data CoroutineM : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
+    MkCoroutine : m (Either r (s, CoroutineM s m r)) -> CoroutineM s m r
+  
+  public export
+  Intermediate : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
   Intermediate s m r = Either r (Suspended s m r)
 
   public export
-  Suspended : (s, m : Type -> Type) -> (r : Type) -> Type
-  Suspended s m r = s (Lazy (CoroutineT s m r))
+  Suspended : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
+  Suspended s m r = (s, CoroutineM s m r)
+
+public export
+Coroutine : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
+Coroutine s m = CPS (CoroutineM s m)
+
+public export
+interface (Monad m) => ICoroutine (s : Type) (m : Type -> Type) where
+  suspend : (s, m a) -> m a
+
+public export
+{s : Type} -> {m : Type -> Type} -> (Applicative m, Monad (CoroutineM s m)) =>
+ICoroutine s (CoroutineM s m)
+where
+  suspend = MkCoroutine . pure . Right
+
+public export
+{s : Type} -> {m : Type -> Type} -> ICoroutine s m =>
+ICoroutine s (CPS m)
+where
+  suspend t = MkCPS (\h => suspend (map (\(MkCPS p) => p h) t))
+
+resolve :
+  {s : Type} -> {m : Type -> Type} -> ICoroutine s (CoroutineM s m) =>
+  ({0 m' : Type -> Type} -> ICoroutine s m' => m' a) ->
+  CoroutineM s m a
+resolve m = runCPS m
+
+pure' : Applicative m => r -> CoroutineM s m r
+pure' = MkCoroutine . pure . Left
+
+bind' : Monad m => (a -> CoroutineM s m b) -> CoroutineM s m a -> CoroutineM s m b
+bind' f (MkCoroutine ma) = MkCoroutine $ do
+  a <- ma
+  case a of
+    Left  a'      => let MkCoroutine fa' = f a' in fa'
+    Right (s, mb) => pure $ Right (s, bind' f mb)
 
 export
-runCoroutineT : CoroutineT s m r -> m (Intermediate s m r)
-runCoroutineT (MkCoroutineT m) = m
-
-unwrap : CoroutineT s m r -> m (Intermediate s m r)
-unwrap (MkCoroutineT ma) = ma
-
-eitherM : Monad m => Lazy (a -> m c) -> Lazy (b -> m c) -> m (Either a b) -> m c
-eitherM f g = (>>= either f g)
-
-eitherM' : Monad m => m (Either a b) -> Lazy (a -> m c) -> Lazy (b -> m c) -> m c
-eitherM' me f g = eitherM f g me
-
-mapLazy : Functor f => (a -> b) -> f (Lazy a) -> f (Lazy b)
-mapLazy f = map $ delay . f . force
+Monad m => Functor (CoroutineM s m) where
+  map f ma = bind' (pure' . f) ma
 
 export
-(Functor s, Monad m) => Functor (CoroutineT s m) where
-  map f (MkCoroutineT ma) = MkCoroutineT $ eitherM' ma
-    (pure . Left . f)
-    (pure . Right . mapLazy (map f))
-
-export
-(Functor s, Monad m) => Applicative (CoroutineT s m) where
-  pure = MkCoroutineT . pure . Left
-  MkCoroutineT mf <*> ca = MkCoroutineT $ eitherM' mf
-    (unwrap . (<$> ca))
-    (pure . Right . mapLazy (<*> ca))
+Monad m => Applicative (CoroutineM s m) where
+  pure      = pure'
+  mf <*> ca = bind' (\a => bind' (\f => pure' (f a)) mf) ca
 
 export
 covering
-(Functor s, Monad m) => Monad (CoroutineT s m) where
-  MkCoroutineT ma >>= f = MkCoroutineT $ eitherM' ma
-    (unwrap . f)
-    (pure . Right . mapLazy (>>= f))
+Monad m => Monad (CoroutineM s m) where
+  ma >>= f = bind' f ma
 
 export
-(Functor s, MonadState stateType m) => MonadState stateType (CoroutineT s m) where
-  get = MkCoroutineT $ get >>= pure . Left
-  put = MkCoroutineT . (>> pure (Left ())) . put
+MonadTrans (Coroutine s) where
+  lift = rep . MkCoroutine . (Left <$>)
 
 export
-(Functor s, HasIO m) => HasIO (CoroutineT s m) where
-  liftIO = MkCoroutineT . liftIO . map Left
+MonadState stateType m => MonadState stateType (Coroutine s m) where
+  get = rep $ MkCoroutine $  Left <$>    get
+  put = rep . MkCoroutine . (Left <$>) . put
 
 export
-suspend : Applicative m => Suspended s m r -> CoroutineT s m r
-suspend = MkCoroutineT . pure . Right
+HasIO m => HasIO (Coroutine s m) where
+  liftIO = rep . MkCoroutine . liftIO . (Left <$>)
+
+runCoroutineM : CoroutineM s m r -> m (Intermediate s m r)
+runCoroutineM (MkCoroutine m) = m
+
+export
+runCoroutine : Monad m => Coroutine s m r -> m (Intermediate s m r)
+runCoroutine cps = let MkCoroutine m = runCPS cps in m
 
 public export
-interface (Functor s, Monad m) => Suspension (s : Type -> Type) (m : Type -> Type) where
-  awaitAll  : List (s a) -> b -> s b
-  resume    : Suspended s m r -> CoroutineT s m r
-  resumable : Suspended s m r -> m Bool
-  resumable _ = pure True
+interface (Semigroup s, Monad m) => Suspension (s : Type) (m : Type -> Type) where
+  resumable : s -> m Bool
 
-data Status : (s, m : Type -> Type) -> (r : Type) -> Type where
-  Finished     : r                    -> Status s m r
-  Resumable    : Suspended s m r      -> Status s m r
-  NotResumable : Suspended s m r      -> Status s m r
+data Status : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
+  Finished     : r               -> Status s m r
+  Resumable    : Suspended s m r -> Status s m r
+  NotResumable : Suspended s m r -> Status s m r
 
-data TotalStatus : (s, m : Type -> Type) -> (r : Type) -> Type where
+data TotalStatus : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
   AllFinished   : List r                  -> TotalStatus s m r
-  SomeResumable : List (Status s m r)     -> TotalStatus s m r
-  Stuck         : List (Status s m r)     -> TotalStatus s m r
+  SomeResumable : List1 (Suspended s m r) -> TotalStatus s m r
+  Stuck         : List1 (Suspended s m r) -> TotalStatus s m r
 
-parameters {s, m : Type -> Type} {r : Type} {auto sus : Suspension s m}
-  Status' = Status s m r
-  Statuses = List Status'
+select : (Lazy a, Lazy a) -> Bool -> a
+select (l, r) b = if b then l else r
+
+parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m}
+  Status'       = Status s m r
+  Statuses      = List Status'
   Intermediate' = Intermediate s m r
-  Suspended' = Suspended s m r
+  Suspended'    = Suspended s m r
 
   status : Intermediate' -> m Status'
-  status (Left r)  = pure $ Finished r
-  status (Right s) = resumable s <&> \x => if x then Resumable s else NotResumable s
+  status (Left  r)         = pure $ Finished r
+  status (Right s@(s', _)) = select (Resumable s, NotResumable s) <$> resumable s'
 
   overallStatus : Statuses -> TotalStatus s m r
   overallStatus [] = AllFinished []
   overallStatus (s@(Finished r)      :: rest) = case overallStatus rest of
-    AllFinished   rest' => AllFinished   (r  :: rest')
-    SomeResumable rest' => SomeResumable (s  :: rest')
-    Stuck         rest' => Stuck         (s  :: rest')
-  overallStatus (s'@(Resumable _)    :: rest) = case overallStatus rest of
-    AllFinished   rest' => SomeResumable (s' :: (Finished <$> rest'))
-    SomeResumable rest' => SomeResumable (s' :: rest')
-    Stuck         rest' => SomeResumable (s' :: rest')
-  overallStatus (s'@(NotResumable _) :: rest) = case overallStatus rest of
-    AllFinished   rest' => Stuck         (s' :: (Finished <$> rest'))
-    SomeResumable rest' => SomeResumable (s' :: rest')
-    Stuck         rest' => Stuck         (s' :: rest')
+    AllFinished   values           => AllFinished   (r :: values)
+    SomeResumable resumables       => SomeResumable resumables
+    Stuck         nonResumables    => Stuck         nonResumables
+  overallStatus (s@(Resumable s')    :: rest) = case overallStatus rest of
+    AllFinished   values           => SomeResumable (singleton s')
+    SomeResumable resumables       => SomeResumable (cons s' resumables)
+    Stuck         nonResumables    => SomeResumable (singleton s')
+  overallStatus (s@(NotResumable s') :: rest) = case overallStatus rest of
+    AllFinished   values           => Stuck         (singleton s')
+    SomeResumable resumables       => SomeResumable resumables
+    Stuck         nonResumables    => SomeResumable (cons s' nonResumables)
 
   bounceStatus : Status' -> m Intermediate'
-  bounceStatus (Finished r)     = pure $ Left r
-  bounceStatus (NotResumable s) = pure $ Right s
-  bounceStatus (Resumable s)    = let MkCoroutineT mr = resume s in mr
-
-  nonResumables : Status' -> List Suspended'
-  nonResumables (NotResumable x) = [x]
-  nonResumables _                = []
+  bounceStatus (Finished r)            = pure $ Left r
+  bounceStatus (NotResumable s)        = pure $ Right s
+  bounceStatus (Resumable s@(_, next)) = runCoroutineM next
 
   mutual
-    suspendAll : Statuses -> Suspended s m (List r)
-    suspendAll ss = awaitAll @{sus} (ss >>= nonResumables) (delay $ MkCoroutineT $ trampoline ss)
+    suspendAll : Statuses -> List1 Suspended' -> Suspended s m (List r)
+    suspendAll ss nonResumables = (foldl1 (<+>) $ fst <$> nonResumables, MkCoroutine $ trampoline ss)
     
     trampoline : Statuses -> m (Intermediate s m (List r))
     trampoline []       = pure $ Left []
     trampoline statuses = case overallStatus statuses of
-      AllFinished   rs => pure $ Left rs
-      Stuck         ss => pure $ Right $ suspendAll ss
-      SomeResumable ss => traverse bounceStatus ss >>= traverse status >>= trampoline
+      AllFinished   values           => pure $ Left  $ values
+      Stuck         nonResumables    => pure $ Right $ suspendAll statuses nonResumables
+      SomeResumable resumables       => traverse bounceStatus statuses >>= traverse status >>= trampoline
 
   export
-  concurrent : List (CoroutineT s m r) -> CoroutineT s m (List r)
-  concurrent coroutines = MkCoroutineT $ traverse unwrap coroutines >>= traverse status >>= trampoline
+  concurrent : List (Coroutine s m r) -> Coroutine s m (List r)
+  concurrent coroutines = rep $ MkCoroutine $ do
+    subresults <- traverse runCoroutineM $ runCPS <$> coroutines
+    statuses <- traverse status subresults
+    trampoline statuses
