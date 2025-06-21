@@ -104,7 +104,7 @@ data TotalStatus : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
 select : (Lazy a, Lazy a) -> Bool -> a
 select (l, r) b = if b then l else r
 
-parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m}
+parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m} {auto hasIO : HasIO m} {auto showS : Show s}
   Status'       = Status s m r
   Statuses      = List Status'
   Intermediate' = Intermediate s m r
@@ -134,6 +134,13 @@ parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m}
   bounceStatus (NotResumable s)        = pure $ Right s
   bounceStatus (Resumable s@(_, next)) = runCoroutineM next
 
+  showSuspended : Suspended' -> String
+  showSuspended (s, _) = "Suspended: " ++ show s
+
+  showIntermediate : Intermediate' -> String
+  showIntermediate (Left x)  = "Done!"
+  showIntermediate (Right x) = showSuspended x
+
   mutual
     suspendAll : Statuses -> List1 Suspended' -> Suspended s m (List r)
     suspendAll ss nonResumables = (foldl1 (<+>) $ fst <$> nonResumables, MkCoroutine $ trampoline ss)
@@ -142,12 +149,11 @@ parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m}
     trampoline []       = pure $ Left []
     trampoline statuses = case overallStatus statuses of
       AllFinished   values           => pure $ Left  $ values
-      Stuck         nonResumables    => pure $ Right $ suspendAll statuses nonResumables
+      Stuck         nonResumables    => do
+        -- putStrLn "Stuck with non-resumables, suspending..."
+        pure $ Right $ suspendAll statuses nonResumables
       SomeResumable resumables       => traverse bounceStatus statuses >>= traverse status >>= trampoline
 
   export
   concurrent : List (Coroutine s m r) -> Coroutine s m (List r)
-  concurrent coroutines = rep $ MkCoroutine $ do
-    subresults <- traverse runCoroutineM $ runCPS <$> coroutines
-    statuses <- traverse status subresults
-    trampoline statuses
+  concurrent coroutines = rep $ MkCoroutine $ traverse runCoroutineM (runCPS <$> coroutines) >>= traverse status >>= trampoline

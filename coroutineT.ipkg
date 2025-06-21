@@ -8,6 +8,6 @@ authors = "hakanaras (hakan.aras@live.at)"
 maintainers = "hakanaras (hakan.aras@live.at)"
 homepage = "https://hakanaras.net/"
 
--- main = Main
--- executable = "coroutineT"
--- opts = "--profile"
+main = Main
+executable = "coroutineT"
+opts = "" -- "--codegen racket" -- "--profile"
