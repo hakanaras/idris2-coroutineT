@@ -19,6 +19,7 @@ Functor (CPS m) where
 export
 Monad m => Applicative (CPS m) where
   pure a              = MkCPS ($ a)
+  -- TODO - Shouldn't use the underlying monads functions:
   MkCPS f <*> MkCPS a = MkCPS (f pure <*> a pure >>=)
 
 export

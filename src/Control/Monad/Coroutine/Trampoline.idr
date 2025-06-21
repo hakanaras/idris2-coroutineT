@@ -41,7 +41,7 @@ parameters {0 s : Type} {0 m : Type -> Type} {0 r : Type} {auto sus : Suspension
 
   mutual
     suspendAll : List (Status s m r) -> List1 (Suspended s m r) -> Suspended s m (List r)
-    suspendAll ss nonResumables = (foldl1 (<+>) $ fst <$> nonResumables, MkCoroutine $ trampoline ss)
+    suspendAll ss nonResumables = (foldr1 (<+>) $ fst <$> nonResumables, MkCoroutine $ trampoline ss)
     
     export
     trampoline : List (Status s m r) -> m (Intermediate s m (List r))

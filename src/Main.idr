@@ -60,12 +60,12 @@ task1 = do
   b0 <- lookupVar "b0"
   pure $ "( Task 1 is done: " ++ a0 ++ " " ++ b0 ++ " )"
 
-stackSafeTask : String -> String -> Int -> MyCoroutine (List String)
-stackSafeTask myPrefix otherPrefix num = do
+stackUnsafeTask : String -> String -> Int -> MyCoroutine (List String)
+stackUnsafeTask myPrefix otherPrefix num = do
   putVar (myPrefix ++ show num) (show myPrefix ++ " " ++ show num)
   other <- lookupVar (otherPrefix ++ show num)
   if num > 0
-    then (other ::) <$> stackSafeTask myPrefix otherPrefix (num - 1)
+    then (other ::) <$> stackUnsafeTask myPrefix otherPrefix (num - 1)
     else pure [other]
 
 printIntermediate : Show a => Intermediate Await InnerMonad a -> String
@@ -76,5 +76,5 @@ main : IO ()
 main = do
   eitherResult <- (runMyCoroutine $ joinBy ", " <$> concurrent [task0, task1])
   putStrLn $ printIntermediate eitherResult
-  stackSafeResult <- runMyCoroutine $ joinBy ", " <$> (show . length <$>) <$> concurrent [stackSafeTask "0" "1" 1000000, stackSafeTask "1" "0" 1000000]
+  stackSafeResult <- runMyCoroutine $ joinBy ", " <$> (show . length <$>) <$> concurrent [stackUnsafeTask "0" "1" 1000000, stackUnsafeTask "1" "0" 1000000]
   putStrLn $ printIntermediate stackSafeResult

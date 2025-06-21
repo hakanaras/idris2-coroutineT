@@ -29,7 +29,7 @@ The point of this function is to be able to run multiple routines that may depen
 
 ## Example
 
-Check `Main.idr` for a full sample (including a demonstration of stack-safety), but in short:
+Check `Main.idr` for a full sample, but in short:
 
 ```
 task0 : MyCoroutine String
