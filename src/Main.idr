@@ -7,13 +7,17 @@ import Data.String
 import Control.Monad.State
 import Control.Monad.Coroutine
 
+0 Scope : Type
 Scope = SortedMap String String
+
+0 InnerMonad : Type -> Type
 InnerMonad = StateT Scope IO
 
 record Await where
   constructor MkAwait
   keys : List1 String
 
+0 MyCoroutine : Type -> Type
 MyCoroutine = Coroutine Await InnerMonad
 
 runMyCoroutine : MyCoroutine a -> IO (Intermediate Await InnerMonad a)
