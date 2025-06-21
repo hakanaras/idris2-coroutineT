@@ -76,5 +76,5 @@ main : IO ()
 main = do
   eitherResult <- (runMyCoroutine $ joinBy ", " <$> concurrent [task0, task1])
   putStrLn $ printIntermediate eitherResult
-  stackSafeResult <- runMyCoroutine $ joinBy ", " <$> (show . length <$>) <$> concurrent [stackSafeTask "0" "1" 10, stackSafeTask "1" "0" 10]
+  stackSafeResult <- runMyCoroutine $ joinBy ", " <$> (show . length <$>) <$> concurrent [stackSafeTask "0" "1" 1000000, stackSafeTask "1" "0" 1000000]
   putStrLn $ printIntermediate stackSafeResult

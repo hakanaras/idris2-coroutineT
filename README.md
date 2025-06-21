@@ -65,3 +65,9 @@ Or if we interrupt the flow by commenting this line:
 ```
 
 Output: `Coroutine is waiting for: b1`
+
+## Credits
+
+An optimization that reduces the runtime complexity from quadratic with the number of binds/suspensions to linear is applied as described here: [Asymptotic Improvement of Computations over Free Monads - Janis Voigtländer](https://janis-voigtlaender.eu/papers/AsymptoticImprovementOfComputationsOverFreeMonads.pdf).
+
+Thanks to [Stefan Höck](https://github.com/stefan-hoeck) for his help in finding a laziness error.

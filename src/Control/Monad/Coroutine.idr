@@ -7,7 +7,7 @@ import Data.List1
 mutual
   public export
   data CoroutineM : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
-    MkCoroutine : m (Either r (s, CoroutineM s m r)) -> CoroutineM s m r
+    MkCoroutine : m (Either r (Suspended s m r)) -> CoroutineM s m r
   
   public export
   Intermediate : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
@@ -15,7 +15,7 @@ mutual
 
   public export
   Suspended : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
-  Suspended s m r = (s, CoroutineM s m r)
+  Suspended s m r = (s, Lazy (CoroutineM s m r))
 
 public export
 Coroutine : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
@@ -23,7 +23,7 @@ Coroutine s m = CPS (CoroutineM s m)
 
 public export
 interface (Monad m) => ICoroutine (s : Type) (m : Type -> Type) where
-  suspend : (s, m a) -> m a
+  suspend : (s, Lazy (m a)) -> m a
 
 public export
 {s : Type} -> {m : Type -> Type} -> (Applicative m, Monad (CoroutineM s m)) =>
@@ -51,7 +51,7 @@ bind' f (MkCoroutine ma) = MkCoroutine $ do
   a <- ma
   case a of
     Left  a'      => let MkCoroutine fa' = f a' in fa'
-    Right (s, mb) => pure $ Right (s, bind' f mb)
+    Right (s, mb) => pure $ Right (s, delay $ bind' f mb)
 
 export
 Monad m => Functor (CoroutineM s m) where
