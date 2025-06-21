@@ -18,7 +18,7 @@ where:
 
 Also provided is a function for concurrent execution of interdependent coroutines:
 
-`concurrent : List (Coroutine s m r) -> Coroutine s m (List r)`
+`concurrent : Suspension s m => List (Coroutine s m r) -> Coroutine s m (List r)`
 
 A special case of `traverse`. It "trampolines" any number of subroutines, i.e. it runs them all and repeatedly resumes them until either:
 
