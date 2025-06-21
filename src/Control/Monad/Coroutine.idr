@@ -6,7 +6,7 @@ import Control.Monad.Coroutine.Trampoline
 import Control.Monad.State
 
 public export
-Coroutine : Type -> (Type -> Type) -> (r : Type) -> Type
+Coroutine : Type -> (Type -> Type) -> Type -> Type
 Coroutine s m = CPS (CoroutineImpl s m)
 
 export
@@ -30,7 +30,6 @@ export
 runCoroutine : Monad m => Coroutine s m r -> m (Intermediate s m r)
 runCoroutine cps = let MkCoroutine m = runCPS cps in m
 
-parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m}
-  export
-  concurrent : List (Coroutine s m r) -> Coroutine s m (List r)
-  concurrent coroutines = rep $ MkCoroutine $ traverse runCoroutineImpl (runCPS <$> coroutines) >>= traverse status >>= trampoline
+export
+concurrent : Suspension s m => List (Coroutine s m r) -> Coroutine s m (List r)
+concurrent coroutines = rep $ MkCoroutine $ traverse runCoroutineImpl (runCPS <$> coroutines) >>= traverse status >>= trampoline
