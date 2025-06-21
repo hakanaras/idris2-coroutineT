@@ -10,35 +10,35 @@ mutual
     MkCoroutine : m (Either r (s, CoroutineM s m r)) -> CoroutineM s m r
   
   public export
-  Intermediate : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
+  0 Intermediate : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
   Intermediate s m r = Either r (Suspended s m r)
 
   public export
-  Suspended : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
+  0 Suspended : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
   Suspended s m r = (s, CoroutineM s m r)
 
 public export
-Coroutine : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
+0 Coroutine : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type
 Coroutine s m = CPS (CoroutineM s m)
 
 public export
-interface (Monad m) => ICoroutine (s : Type) (m : Type -> Type) where
+interface (Monad m) => ICoroutine (0 s : Type) (0 m : Type -> Type) where
   suspend : (s, m a) -> m a
 
 public export
-{s : Type} -> {m : Type -> Type} -> (Applicative m, Monad (CoroutineM s m)) =>
+{0 s : Type} -> {0 m : Type -> Type} -> (Applicative m, Monad (CoroutineM s m)) =>
 ICoroutine s (CoroutineM s m)
 where
   suspend = MkCoroutine . pure . Right
 
 public export
-{s : Type} -> {m : Type -> Type} -> ICoroutine s m =>
+{0 s : Type} -> {0 m : Type -> Type} -> ICoroutine s m =>
 ICoroutine s (CPS m)
 where
   suspend t = MkCPS (\h => suspend (map (\(MkCPS p) => p h) t))
 
 resolve :
-  {s : Type} -> {m : Type -> Type} -> ICoroutine s (CoroutineM s m) =>
+  {0 s : Type} -> {0 m : Type -> Type} -> ICoroutine s (CoroutineM s m) =>
   ({0 m' : Type -> Type} -> ICoroutine s m' => m' a) ->
   CoroutineM s m a
 resolve m = runCPS m
@@ -83,12 +83,15 @@ HasIO m => HasIO (Coroutine s m) where
 runCoroutineM : CoroutineM s m r -> m (Intermediate s m r)
 runCoroutineM (MkCoroutine m) = m
 
+delay : Monad m => Lazy a -> m a
+delay v = pure () >> pure v
+
 export
 runCoroutine : Monad m => Coroutine s m r -> m (Intermediate s m r)
 runCoroutine cps = let MkCoroutine m = runCPS cps in m
 
 public export
-interface (Semigroup s, Monad m) => Suspension (s : Type) (m : Type -> Type) where
+interface (Semigroup s, Monad m) => Suspension (0 s : Type) (0 m : Type -> Type) where
   resumable : s -> m Bool
 
 data Status : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
@@ -104,10 +107,23 @@ data TotalStatus : (s : Type) -> (m : Type -> Type) -> (r : Type) -> Type where
 select : (Lazy a, Lazy a) -> Bool -> a
 select (l, r) b = if b then l else r
 
-parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m} {auto hasIO : HasIO m} {auto showS : Show s}
+parameters {0 s : Type}
+           {0 m : Type -> Type}
+           {0 r : Type}
+           {auto sus : Suspension s m}
+           {auto hasIO : HasIO m}
+           {auto showS : Show s}
+
+  0 Status' : Type
   Status'       = Status s m r
+
+  0 Statuses : Type
   Statuses      = List Status'
+
+  0 Intermediate' : Type
   Intermediate' = Intermediate s m r
+
+  0 Suspended' : Type
   Suspended'    = Suspended s m r
 
   status : Intermediate' -> m Status'
@@ -151,7 +167,7 @@ parameters {s : Type} {m : Type -> Type} {r : Type} {auto sus : Suspension s m} 
       AllFinished   values           => pure $ Left  $ values
       Stuck         nonResumables    => do
         -- putStrLn "Stuck with non-resumables, suspending..."
-        pure $ Right $ suspendAll statuses nonResumables
+        delay $ Right $ suspendAll statuses nonResumables
       SomeResumable resumables       => traverse bounceStatus statuses >>= traverse status >>= trampoline
 
   export
